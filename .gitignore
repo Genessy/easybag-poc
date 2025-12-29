@@ -1,0 +1,33 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Dépendances (Le plus important !)
+node_modules
+dist
+dist-ssr
+*.local
+
+# Éditeurs de code (Fichiers de config perso qu'on ne partage pas)
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs
+*.njsproj
+*.sln
+*.sw?
+
+# Environnement (Pour ne pas leaker tes clés si on utilise des .env plus tard)
+.env
+.env.*
+!.env.example
+
+# Firebase
+.firebase/
