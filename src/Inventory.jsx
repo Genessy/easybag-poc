@@ -1,28 +1,255 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Shield } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
+import { Trash2, ArrowLeft, Backpack, Coins, Plus, Minus, Sword, Shield } from 'lucide-react';
+import { deleteCharacter, subscribeToCharacter, updateCurrency, addItem, removeItem } from './services/character';
+import ArmoryModal from './components/ArmoryModal';
+import { ItemIcon } from './utils/itemHelpers';
+
+const CURRENCIES = [
+    { id: 'pp', label: 'Platine', color: 'text-slate-300', bg: 'bg-slate-500/20', border: 'border-slate-500/20' },
+    { id: 'po', label: 'Or', color: 'text-yellow-400', bg: 'bg-yellow-500/20', border: 'border-yellow-500/20' },
+    { id: 'pe', label: 'Electrum', color: 'text-indigo-300', bg: 'bg-indigo-500/20', border: 'border-indigo-500/20' },
+    { id: 'pa', label: 'Argent', color: 'text-gray-300', bg: 'bg-gray-500/20', border: 'border-gray-500/20' },
+    { id: 'pc', label: 'Cuivre', color: 'text-orange-400', bg: 'bg-orange-500/20', border: 'border-orange-500/20' },
+];
 
 export default function Inventory() {
     const navigate = useNavigate();
-    const [pseudo, setPseudo] = useState('');
+    const [character, setCharacter] = useState(null);
+    const [amounts, setAmounts] = useState({});
+    const [newItemName, setNewItemName] = useState('');
+    const [newItemQuantity, setNewItemQuantity] = useState(1);
+    const [showArmory, setShowArmory] = useState(false);
 
     useEffect(() => {
-        // 1. On vérifie si l'utilisateur est connecté
         const storedPseudo = localStorage.getItem('easybag-pseudo');
         if (!storedPseudo) {
-            navigate('/'); // Si pas de pseudo, retour à l'accueil
-        } else {
-            setPseudo(storedPseudo);
+            navigate('/');
+            return;
         }
+
+        const unsubscribe = subscribeToCharacter(storedPseudo, (data) => {
+            if (!data) {
+                localStorage.removeItem('easybag-pseudo');
+                navigate('/');
+            } else {
+                setCharacter(data);
+            }
+        });
+
+        return () => unsubscribe();
     }, [navigate]);
 
+    const handleDelete = async () => {
+        if (!character) return;
+
+        if (window.confirm('Es-tu sûr de vouloir supprimer ce personnage ? Cette action est irréversible.')) {
+            try {
+                await deleteCharacter(character.pseudo);
+            } catch (error) {
+                console.error("Erreur suppression:", error);
+            }
+        }
+    };
+
+    const handleCurrencyUpdate = async (currency, isAdding) => {
+        const value = amounts[currency];
+        if (!value) return;
+
+        const amount = parseInt(value, 10);
+        if (isNaN(amount)) return;
+
+        const finalAmount = isAdding ? amount : -amount;
+
+        try {
+            await updateCurrency(character.pseudo, currency, finalAmount);
+            setAmounts(prev => ({ ...prev, [currency]: '' }));
+        } catch (error) {
+            console.error("Erreur devise:", error);
+        }
+    };
+
+    const handleAddItem = async (e) => {
+        if (e && e.preventDefault) e.preventDefault();
+        if (!newItemName.trim()) return;
+
+        try {
+            await addItem(character.pseudo, newItemName, newItemQuantity);
+            setNewItemName('');
+            setNewItemQuantity(1);
+        } catch (error) {
+            console.error("Erreur ajout item:", error);
+        }
+    };
+
+    const handleAddWeaponFromArmory = async (weapon) => {
+        try {
+            await addItem(character.pseudo, weapon.name, 1);
+        } catch (error) {
+            console.error("Erreur ajout arme:", error);
+        }
+    };
+
+    const handleRemoveItem = async (itemName) => {
+        try {
+            await removeItem(character.pseudo, itemName);
+        } catch (error) {
+            console.error("Erreur suppression item:", error);
+        }
+    };
+
+    if (!character) return <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">Chargement...</div>;
+
     return (
-        <div className="min-h-screen bg-slate-900 text-white p-4">
-            <div className="flex items-center gap-3 mb-8 border-b border-slate-700 pb-4">
-                <Shield className="text-emerald-500" />
-                <h1 className="text-xl font-bold">Sac de {pseudo}</h1>
+        <div className="min-h-screen bg-slate-900 text-white p-4 pb-24">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-8 border-b border-slate-700 pb-4">
+                <div className="flex items-center gap-3">
+                    <Backpack className="text-emerald-500" />
+                    <h1 className="text-xl font-bold">Sac de {character.pseudo}</h1>
+                </div>
+                <div className="flex items-center gap-3">
+                    <Link
+                        to="/"
+                        className="group relative flex items-center justify-center gap-3 bg-emerald-600 hover:bg-emerald-500 text-white p-3 rounded-xl transition-all hover:scale-105 shadow-lg shadow-emerald-900/40"
+                    >
+                        <ArrowLeft size={20} />
+                        <span className="font-bold text-lg hidden md:inline">Accueil</span>
+                    </Link>
+                    <button
+                        onClick={handleDelete}
+                        className="p-2 text-red-400 hover:text-red-300 hover:bg-red-900/30 rounded-lg transition-colors"
+                        title="Supprimer le personnage"
+                    >
+                        <Trash2 size={20} />
+                    </button>
+                </div>
             </div>
-            <p className="text-slate-400 text-center mt-10">Inventaire vide (pour l'instant)...</p>
+
+            {/* Zone Devises (Grid) */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 mb-12">
+                {CURRENCIES.map((curr) => (
+                    <div key={curr.id} className={`bg-slate-800 p-4 rounded-xl border ${curr.border} shadow-lg relative overflow-hidden`}>
+                        <div className={`absolute -top-6 -right-6 w-24 h-24 ${curr.bg} rounded-full blur-2xl opacity-50`}></div>
+
+                        <div className="flex justify-between items-start mb-4 relative z-10">
+                            <div>
+                                <h3 className={`font-bold ${curr.color}`}>{curr.label} ({curr.id.toUpperCase()})</h3>
+                                <p className="text-3xl font-bold text-white">{character[curr.id] || 0}</p>
+                            </div>
+                            <Coins className={`${curr.color} opacity-80`} size={24} />
+                        </div>
+
+                        <div className="flex items-center gap-2 bg-slate-900/50 p-1 rounded-lg border border-slate-700 relative z-10">
+                            <input
+                                type="number"
+                                value={amounts[curr.id] || ''}
+                                onChange={(e) => setAmounts(prev => ({ ...prev, [curr.id]: e.target.value }))}
+                                placeholder="0"
+                                className="bg-transparent text-white w-full px-2 py-1 outline-none font-mono text-center text-sm"
+                            />
+                            <div className="flex gap-1">
+                                <button
+                                    onClick={() => handleCurrencyUpdate(curr.id, false)}
+                                    disabled={!amounts[curr.id]}
+                                    className="p-1 hover:bg-red-500/20 text-red-400 rounded transition-colors disabled:opacity-30"
+                                >
+                                    <Minus size={16} />
+                                </button>
+                                <button
+                                    onClick={() => handleCurrencyUpdate(curr.id, true)}
+                                    disabled={!amounts[curr.id]}
+                                    className="p-1 hover:bg-emerald-500/20 text-emerald-400 rounded transition-colors disabled:opacity-30"
+                                >
+                                    <Plus size={16} />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Zone Équipement */}
+            <div className="max-w-4xl mx-auto">
+                <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-2xl font-bold flex items-center gap-3 text-emerald-400">
+                        <Sword className="text-emerald-500" />
+                        Équipement
+                    </h2>
+                    <button
+                        onClick={() => setShowArmory(true)}
+                        className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl transition-colors shadow-lg shadow-indigo-900/40"
+                    >
+                        <Shield size={18} />
+                        <span className="font-bold">Armurerie</span>
+                    </button>
+                </div>
+
+                {/* Ajout d'objet */}
+                <form onSubmit={handleAddItem} className="flex flex-col md:flex-row gap-3 mb-8">
+                    <div className="flex gap-3 flex-1">
+                        <input
+                            type="number"
+                            min="1"
+                            value={newItemQuantity}
+                            onChange={(e) => setNewItemQuantity(e.target.value)}
+                            className="w-20 px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-lg text-center"
+                            placeholder="Qté"
+                        />
+                        <input
+                            type="text"
+                            value={newItemName}
+                            onChange={(e) => setNewItemName(e.target.value)}
+                            placeholder="Nouvel objet (ex: Potion de soin)..."
+                            className="flex-1 px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-lg"
+                        />
+                    </div>
+                    <button
+                        type="submit"
+                        disabled={!newItemName.trim()}
+                        className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-xl font-bold transition-colors disabled:opacity-50 shadow-lg shadow-emerald-900/40 w-full md:w-auto"
+                    >
+                        AJOUTER
+                    </button>
+                </form>
+
+                {/* Liste des objets */}
+                <div className="space-y-3">
+                    {(!character.items || character.items.length === 0) ? (
+                        <p className="text-slate-500 text-center py-8 italic border border-dashed border-slate-700 rounded-xl">Ton sac est vide... Ajoute quelque chose !</p>
+                    ) : (
+                        character.items.map((item, index) => (
+                            <div key={index} className="flex items-center justify-between bg-slate-800 p-4 rounded-xl border border-slate-700/50 hover:border-emerald-500/30 transition-colors shadow-md group">
+                                <div className="flex items-center gap-4">
+                                    <div className="relative">
+                                        <div className="w-10 h-10 bg-slate-700 rounded-lg flex items-center justify-center border border-slate-600">
+                                            <ItemIcon itemName={item.name} size={24} />
+                                        </div>
+                                        <span className="absolute -top-2 -right-2 bg-emerald-600 text-white text-xs font-bold px-1.5 py-0.5 rounded-full border border-slate-900 shadow-sm">
+                                            {item.quantity}
+                                        </span>
+                                    </div>
+                                    <span className="font-medium text-lg text-slate-200">{item.name}</span>
+                                </div>
+                                <button
+                                    onClick={() => handleRemoveItem(item.name)}
+                                    className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                                    title="Retirer un exemplaire"
+                                >
+                                    <Trash2 size={20} />
+                                </button>
+                            </div>
+                        ))
+                    )}
+                </div>
+            </div>
+
+            {/* Modal Armurerie */}
+            <ArmoryModal
+                isOpen={showArmory}
+                onClose={() => setShowArmory(false)}
+                onAdd={handleAddWeaponFromArmory}
+            />
         </div>
     );
 }

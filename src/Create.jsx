@@ -1,37 +1,31 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { LogIn, AlertCircle, Loader2, ArrowLeft } from 'lucide-react';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from './firebase';
+import { UserPlus, AlertCircle, Loader2, ArrowLeft } from 'lucide-react';
+import { createCharacter } from './services/character';
 
-export default function Login() {
+export default function Create() {
     const [pseudo, setPseudo] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const navigate = useNavigate();
 
-    const handleLogin = async (e) => {
+    const handleCreate = async (e) => {
         e.preventDefault();
+
         if (!pseudo.trim()) return;
 
         setLoading(true);
         setError('');
 
         try {
-            const cleanPseudo = pseudo.trim();
-            // On vérifie juste l'existence
-            const docRef = doc(db, "parties", "partie_mercredi", "inventaires", cleanPseudo);
-            const docSnap = await getDoc(docRef);
-
-            if (docSnap.exists()) {
-                localStorage.setItem('easybag-pseudo', cleanPseudo);
-                navigate('/inventory');
-            } else {
-                setError("Introuvable ! Vérifie l'orthographe ou crée un perso.");
-            }
+            const createdPseudo = await createCharacter(pseudo);
+            // Succès : on enregistre et on part
+            localStorage.setItem('easybag-pseudo', createdPseudo);
+            navigate('/inventory');
         } catch (err) {
+            // Erreur : on affiche le message
             console.error(err);
-            setError("Erreur réseau.");
+            setError(err.message || "Erreur lors de la création.");
         } finally {
             setLoading(false);
         }
@@ -39,23 +33,22 @@ export default function Login() {
 
     return (
         <div className="h-screen bg-slate-900 text-white p-6 flex flex-col items-center justify-center">
-            {/* Bouton Retour */}
             <Link to="/" className="absolute top-6 left-6 text-slate-400 hover:text-white transition-colors">
                 <ArrowLeft size={24} />
             </Link>
 
             <div className="w-full max-w-xs space-y-6">
                 <div className="text-center">
-                    <h2 className="text-2xl font-bold text-emerald-400">Connexion</h2>
-                    <p className="text-slate-400 text-sm">Récupère ton équipement</p>
+                    <h2 className="text-2xl font-bold text-emerald-400">Nouveau Joueur</h2>
+                    <p className="text-slate-400 text-sm">Prépare ton paquetage</p>
                 </div>
 
-                <form onSubmit={handleLogin} className="space-y-4">
+                <form onSubmit={handleCreate} className="space-y-4">
                     <input
                         type="text"
                         value={pseudo}
                         onChange={(e) => setPseudo(e.target.value)}
-                        placeholder="Ton pseudo exact"
+                        placeholder="Choisis un pseudo"
                         className="w-full px-4 py-3 rounded-lg bg-slate-800 border border-slate-700 focus:ring-2 focus:ring-emerald-500 outline-none"
                         autoFocus
                     />
@@ -71,8 +64,8 @@ export default function Login() {
                         disabled={loading || !pseudo}
                         className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 rounded-lg font-bold flex justify-center items-center gap-2 disabled:opacity-50"
                     >
-                        {loading ? <Loader2 className="animate-spin" /> : <LogIn size={20} />}
-                        Ouvrir mon sac
+                        {loading ? <Loader2 className="animate-spin" /> : <UserPlus size={20} />}
+                        Créer le personnage
                     </button>
                 </form>
             </div>
