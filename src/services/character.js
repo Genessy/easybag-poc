@@ -38,7 +38,7 @@ export const updateCurrency = async (pseudo, currency, amount) => {
  * @param {string} itemName 
  * @param {number} count - Quantité à ajouter (défaut 1)
  */
-export const addItem = async (pseudo, itemName, count = 1) => {
+export const addItem = async (pseudo, itemName, count = 1, weight = null, category = null) => {
     if (!itemName || !itemName.trim()) return;
     const cleanName = itemName.trim();
     const quantityToAdd = parseInt(count) || 1;
@@ -58,7 +58,14 @@ export const addItem = async (pseudo, itemName, count = 1) => {
             items[existingItemIndex].quantity += quantityToAdd;
         } else {
             // On crée le nouvel objet
-            items.push({ name: cleanName, quantity: quantityToAdd });
+            const newItem = { name: cleanName, quantity: quantityToAdd };
+            if (weight !== null && weight !== undefined && weight !== '') {
+                newItem.weight = parseFloat(weight) || 0;
+            }
+            if (category && category !== 'misc') {
+                newItem.category = category;
+            }
+            items.push(newItem);
         }
 
         await updateDoc(docRef, { items });
@@ -66,11 +73,12 @@ export const addItem = async (pseudo, itemName, count = 1) => {
 };
 
 /**
- * Retire un objet de l'inventaire (baisse la quantité ou supprime).
+ * Retire un objet de l'inventaire.
  * @param {string} pseudo 
  * @param {string} itemName 
+ * @param {number} count - Quantité à retirer (défaut 1). Si >= quantité actuelle, supprime l'objet.
  */
-export const removeItem = async (pseudo, itemName) => {
+export const removeItem = async (pseudo, itemName, count = 1) => {
     const docRef = doc(db, "parties", "partie_mercredi", "inventaires", pseudo);
     const docSnap = await getDoc(docRef);
 
@@ -81,9 +89,13 @@ export const removeItem = async (pseudo, itemName) => {
         const existingItemIndex = items.findIndex(i => i.name === itemName);
 
         if (existingItemIndex >= 0) {
-            if (items[existingItemIndex].quantity > 1) {
-                items[existingItemIndex].quantity -= 1;
+            const currentQty = items[existingItemIndex].quantity;
+            const qtyToRemove = parseInt(count) || 1;
+
+            if (currentQty > qtyToRemove) {
+                items[existingItemIndex].quantity -= qtyToRemove;
             } else {
+                // Si on retire tout ou plus que ce qu'on a, on supprime l'objet
                 items = items.filter((_, index) => index !== existingItemIndex);
             }
 

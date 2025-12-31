@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Trash2, ArrowLeft, Backpack, Coins, Plus, Minus, Sword, Shield, ChevronDown, ChevronRight } from 'lucide-react';
 import { deleteCharacter, subscribeToCharacter, updateCurrency, addItem, removeItem, updateStats } from './services/character';
 import ArmoryModal from './components/ArmoryModal';
+import InventoryItemModal from './components/InventoryItemModal';
 import { ItemIcon, calculateTotalWeight, getItemWeight } from './utils/itemHelpers';
 
 const CURRENCIES = [
@@ -19,9 +20,13 @@ export default function Inventory() {
     const [amounts, setAmounts] = useState({});
     const [newItemName, setNewItemName] = useState('');
     const [newItemQuantity, setNewItemQuantity] = useState(1);
+    const [newItemWeight, setNewItemWeight] = useState('');
+    const [newItemCategory, setNewItemCategory] = useState('misc');
     const [showArmory, setShowArmory] = useState(false);
+    const [selectedItem, setSelectedItem] = useState(null);
     const [force, setForce] = useState(10); // Valeur par défaut
-    const [showCurrencies, setShowCurrencies] = useState(true);
+    const [showCurrencies, setShowCurrencies] = useState(false);
+    const [showAddItem, setShowAddItem] = useState(false);
 
     useEffect(() => {
         const storedPseudo = localStorage.getItem('easybag-pseudo');
@@ -89,14 +94,25 @@ export default function Inventory() {
         }
     };
 
-    const handleAddItem = async (e) => {
+    const handleAddItem = async (e, nameOverride = null, qtyOverride = null) => {
         if (e && e.preventDefault) e.preventDefault();
-        if (!newItemName.trim()) return;
+
+        const nameToAdd = nameOverride || newItemName;
+        const qtyToAdd = qtyOverride || newItemQuantity;
+        // Si override (Armurerie), on n'utilise pas les champs personnalisés
+        const weightToAdd = nameOverride ? null : newItemWeight;
+        const categoryToAdd = nameOverride ? null : newItemCategory;
+
+        if (!nameToAdd || typeof nameToAdd !== 'string' || !nameToAdd.trim()) return;
 
         try {
-            await addItem(character.pseudo, newItemName, newItemQuantity);
-            setNewItemName('');
-            setNewItemQuantity(1);
+            await addItem(character.pseudo, nameToAdd, qtyToAdd, weightToAdd, categoryToAdd);
+            if (!nameOverride) {
+                setNewItemName('');
+                setNewItemQuantity(1);
+                setNewItemWeight('');
+                setNewItemCategory('misc');
+            }
         } catch (error) {
             console.error("Erreur ajout item:", error);
         }
@@ -110,9 +126,9 @@ export default function Inventory() {
         }
     };
 
-    const handleRemoveItem = async (itemName) => {
+    const handleRemoveItem = async (item, count) => {
         try {
-            await removeItem(character.pseudo, itemName);
+            await removeItem(character.pseudo, item.name, count);
         } catch (error) {
             console.error("Erreur suppression item:", error);
         }
@@ -123,7 +139,7 @@ export default function Inventory() {
     return (
         <div className="min-h-screen bg-slate-900 text-white p-4 pb-24">
             {/* Header */}
-            <div className="flex flex-wrap items-center justify-between mb-8 border-b border-slate-700 pb-4 gap-y-4">
+            <div className="sticky top-0 z-50 bg-slate-900/95 backdrop-blur-md -mx-4 px-4 py-4 mb-8 border-b border-slate-700 flex flex-wrap items-center justify-between gap-y-4 shadow-xl">
                 <div className="flex items-center gap-3 order-1">
                     <Backpack className="text-emerald-500" />
                     <h1 className="text-xl font-bold">Sac de {character.pseudo}</h1>
@@ -203,10 +219,9 @@ export default function Inventory() {
                                 <div className="flex items-center gap-2 bg-slate-900/50 p-1 rounded-lg border border-slate-700 relative z-10">
                                     <input
                                         type="number"
-                                        value={amounts[curr.id] || ''}
                                         onChange={(e) => setAmounts(prev => ({ ...prev, [curr.id]: e.target.value }))}
                                         placeholder="0"
-                                        className="bg-transparent text-white w-full px-2 py-1 outline-none font-mono text-center text-sm"
+                                        className="bg-transparent text-white w-full px-2 py-1 outline-none font-mono text-center text-base"
                                     />
                                     <div className="flex gap-1">
                                         <button
@@ -262,33 +277,89 @@ export default function Inventory() {
                     </div>
                 </div>
 
-                {/* Ajout d'objet */}
-                <form onSubmit={handleAddItem} className="flex flex-col md:flex-row gap-3 mb-8">
-                    <div className="flex gap-3 flex-1">
-                        <input
-                            type="number"
-                            min="1"
-                            value={newItemQuantity}
-                            onChange={(e) => setNewItemQuantity(e.target.value)}
-                            className="w-20 px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-lg text-center"
-                            placeholder="Qté"
-                        />
-                        <input
-                            type="text"
-                            value={newItemName}
-                            onChange={(e) => setNewItemName(e.target.value)}
-                            placeholder="Nouvel objet (ex: Potion de soin)..."
-                            className="flex-1 px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-lg"
-                        />
+                {/* Ajout d'objet (Toggle) */}
+                <button
+                    onClick={() => setShowAddItem(!showAddItem)}
+                    className="flex items-center gap-2 w-full text-left group mb-4"
+                >
+                    <div className="p-1 bg-slate-800 rounded-lg border border-slate-700 text-emerald-500 group-hover:text-emerald-400 group-hover:border-emerald-500/50 transition-colors">
+                        {showAddItem ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
                     </div>
-                    <button
-                        type="submit"
-                        disabled={!newItemName.trim()}
-                        className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-xl font-bold transition-colors disabled:opacity-50 shadow-lg shadow-emerald-900/40 w-full md:w-auto"
-                    >
-                        AJOUTER
-                    </button>
-                </form>
+                    <div className="h-px bg-slate-700 flex-1 group-hover:bg-slate-600 transition-colors"></div>
+                    <span className="text-sm font-bold text-slate-500 group-hover:text-slate-400 transition-colors uppercase tracking-wider">
+                        Ajout personnalisé
+                    </span>
+                    <div className="h-px bg-slate-700 w-12 group-hover:bg-slate-600 transition-colors"></div>
+                </button>
+
+                {showAddItem && (
+                    <form onSubmit={handleAddItem} className="bg-slate-800/30 p-4 rounded-2xl border border-slate-700/50 mb-8 animate-fade-in">
+                        <div className="flex flex-col gap-3">
+                            <input
+                                type="text"
+                                value={newItemName}
+                                onChange={(e) => setNewItemName(e.target.value)}
+                                placeholder="Nouvel objet (ex: Potion de soin)..."
+                                className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-lg text-slate-200"
+                            />
+
+                            <div className="grid grid-cols-3 gap-3">
+                                <div className="relative">
+                                    <label className="block text w-full bg-slate-800 border border-slate-700 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-emerald-500 transition-all shadow-lg relative h-[50px]">
+                                        <span className="absolute top-1 left-0 w-full text-center text-[10px] text-slate-500 uppercase font-bold tracking-wider">Qté</span>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            value={newItemQuantity}
+                                            onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)}
+                                            className="w-full h-full pt-4 px-2 bg-transparent text-center font-bold text-white outline-none"
+                                        />
+                                    </label>
+                                </div>
+
+                                <div className="relative">
+                                    <label className="block text w-full bg-slate-800 border border-slate-700 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-emerald-500 transition-all shadow-lg relative h-[50px]">
+                                        <span className="absolute top-1 left-0 w-full text-center text-[10px] text-slate-500 uppercase font-bold tracking-wider">Poids</span>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="0.1"
+                                            value={newItemWeight}
+                                            onChange={(e) => setNewItemWeight(e.target.value)}
+                                            placeholder="0"
+                                            className="w-full h-full pt-4 px-2 bg-transparent text-center font-bold text-white outline-none placeholder:text-slate-600"
+                                        />
+                                    </label>
+                                </div>
+
+                                <div className="relative">
+                                    <label className="block text w-full bg-slate-800 border border-slate-700 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-emerald-500 transition-all shadow-lg relative h-[50px]">
+                                        <span className="absolute top-1 left-0 w-full text-center text-[10px] text-slate-500 uppercase font-bold tracking-wider">Type</span>
+                                        <select
+                                            value={newItemCategory}
+                                            onChange={(e) => setNewItemCategory(e.target.value)}
+                                            className="w-full h-full pt-4 px-2 bg-slate-800 text-center font-bold text-white outline-none appearance-none cursor-pointer"
+                                        >
+                                            <option value="misc">Autre</option>
+                                            <option value="weapon">Arme</option>
+                                            <option value="armor">Armure</option>
+                                            <option value="potion">Potion</option>
+                                            <option value="ammo">Munition</option>
+                                        </select>
+                                        <ChevronDown size={14} className="absolute right-2 top-2/3 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <button
+                            type="submit"
+                            disabled={!newItemName.trim()}
+                            className="mt-4 bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-xl font-bold transition-colors disabled:opacity-50 shadow-lg shadow-emerald-900/40 w-full"
+                        >
+                            AJOUTER
+                        </button>
+                    </form>
+                )}
 
                 {/* Liste des objets */}
                 <div className="space-y-3">
@@ -296,43 +367,51 @@ export default function Inventory() {
                         <p className="text-slate-500 text-center py-8 italic border border-dashed border-slate-700 rounded-xl">Ton sac est vide... Ajoute quelque chose !</p>
                     ) : (
                         character.items.map((item, index) => (
-                            <div key={index} className="flex items-center justify-between bg-slate-800 p-4 rounded-xl border border-slate-700/50 hover:border-emerald-500/30 transition-colors shadow-md group">
+                            <div
+                                key={index}
+                                onClick={() => setSelectedItem(item)}
+                                className="flex items-center justify-between bg-slate-800 p-4 rounded-xl border border-slate-700/50 hover:border-emerald-500/50 hover:bg-slate-800/80 transition-all shadow-md group cursor-pointer"
+                            >
                                 <div className="flex items-center gap-4">
                                     <div className="relative">
                                         <div className="w-10 h-10 bg-slate-700 rounded-lg flex items-center justify-center border border-slate-600">
-                                            <ItemIcon itemName={item.name} size={24} />
+                                            <ItemIcon item={item} size={24} />
                                         </div>
                                         <span className="absolute -top-2 -right-2 bg-emerald-600 text-white text-xs font-bold px-1.5 py-0.5 rounded-full border border-slate-900 shadow-sm">
                                             {item.quantity}
                                         </span>
                                     </div>
                                     <div className="flex flex-col">
-                                        <span className="font-medium text-lg text-slate-200">{item.name}</span>
+                                        <span className="font-medium text-lg text-slate-200 group-hover:text-emerald-400 transition-colors">{item.name}</span>
                                         <span className="text-xs text-slate-500">
-                                            {(getItemWeight(item.name) * item.quantity).toFixed(1)} kg
-                                            {item.quantity > 1 && ` (${getItemWeight(item.name)} kg/u)`}
+                                            {(getItemWeight(item) * item.quantity).toFixed(1)} kg
+                                            {item.quantity > 1 && ` (${getItemWeight(item)} kg/u)`}
                                         </span>
                                     </div>
                                 </div>
-                                <button
-                                    onClick={() => handleRemoveItem(item.name)}
-                                    className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                                    title="Retirer un exemplaire"
-                                >
-                                    <Trash2 size={20} />
-                                </button>
+                                <div className="p-2 text-slate-600 group-hover:text-emerald-500 transition-colors">
+                                    <ChevronRight size={20} />
+                                </div>
                             </div>
                         ))
                     )}
                 </div>
-            </div>
+            </div >
 
             {/* Modal Armurerie */}
-            <ArmoryModal
+            < ArmoryModal
                 isOpen={showArmory}
-                onClose={() => setShowArmory(false)}
-                onAdd={handleAddWeaponFromArmory}
+                onClose={() => setShowArmory(false)
+                }
+                onAdd={(item) => handleAddItem({ preventDefault: () => { } }, item.name, 1)}
             />
-        </div>
+
+            < InventoryItemModal
+                isOpen={!!selectedItem}
+                onClose={() => setSelectedItem(null)}
+                item={selectedItem}
+                onRemove={handleRemoveItem}
+            />
+        </div >
     );
 }
