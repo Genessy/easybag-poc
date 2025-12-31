@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Trash2, ArrowLeft, Backpack, Coins, Plus, Minus, Sword, Shield } from 'lucide-react';
-import { deleteCharacter, subscribeToCharacter, updateCurrency, addItem, removeItem } from './services/character';
+import { Trash2, ArrowLeft, Backpack, Coins, Plus, Minus, Sword, Shield, ChevronDown, ChevronRight } from 'lucide-react';
+import { deleteCharacter, subscribeToCharacter, updateCurrency, addItem, removeItem, updateStats } from './services/character';
 import ArmoryModal from './components/ArmoryModal';
-import { ItemIcon } from './utils/itemHelpers';
+import { ItemIcon, calculateTotalWeight, getItemWeight } from './utils/itemHelpers';
 
 const CURRENCIES = [
     { id: 'pp', label: 'Platine', color: 'text-slate-300', bg: 'bg-slate-500/20', border: 'border-slate-500/20' },
@@ -20,6 +20,8 @@ export default function Inventory() {
     const [newItemName, setNewItemName] = useState('');
     const [newItemQuantity, setNewItemQuantity] = useState(1);
     const [showArmory, setShowArmory] = useState(false);
+    const [force, setForce] = useState(10); // Valeur par défaut
+    const [showCurrencies, setShowCurrencies] = useState(true);
 
     useEffect(() => {
         const storedPseudo = localStorage.getItem('easybag-pseudo');
@@ -34,6 +36,7 @@ export default function Inventory() {
                 navigate('/');
             } else {
                 setCharacter(data);
+                if (data.force) setForce(data.force);
             }
         });
 
@@ -66,6 +69,23 @@ export default function Inventory() {
             setAmounts(prev => ({ ...prev, [currency]: '' }));
         } catch (error) {
             console.error("Erreur devise:", error);
+        }
+    };
+
+    const handleForceUpdate = async (newForce) => {
+        // Allow clearing the input
+        if (newForce === '') {
+            setForce('');
+            return;
+        }
+
+        const val = parseInt(newForce);
+        if (isNaN(val) || val < 0) return;
+        setForce(val);
+        try {
+            await updateStats(character.pseudo, { force: val });
+        } catch (error) {
+            console.error("Erreur maj force:", error);
         }
     };
 
@@ -103,12 +123,35 @@ export default function Inventory() {
     return (
         <div className="min-h-screen bg-slate-900 text-white p-4 pb-24">
             {/* Header */}
-            <div className="flex items-center justify-between mb-8 border-b border-slate-700 pb-4">
-                <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center justify-between mb-8 border-b border-slate-700 pb-4 gap-y-4">
+                <div className="flex items-center gap-3 order-1">
                     <Backpack className="text-emerald-500" />
                     <h1 className="text-xl font-bold">Sac de {character.pseudo}</h1>
                 </div>
-                <div className="flex items-center gap-3">
+
+                {/* Strength & Weight Display */}
+                <div className="flex items-center gap-4 bg-slate-800 p-2 rounded-xl border border-slate-700 order-3 md:order-2 w-full md:w-auto justify-center">
+                    <div className="flex flex-col items-center px-2">
+                        <span className="text-xs text-slate-400 font-bold uppercase">Force</span>
+                        <input
+                            type="number"
+                            min="1"
+                            max="30"
+                            value={force}
+                            onChange={(e) => handleForceUpdate(e.target.value)}
+                            className="w-12 bg-transparent text-center font-bold text-white outline-none border-b border-slate-600 focus:border-emerald-500 transition-colors"
+                        />
+                    </div>
+                    <div className="h-8 w-px bg-slate-700"></div>
+                    <div className="flex flex-col items-center px-2">
+                        <span className="text-xs text-slate-400 font-bold uppercase">Capacité</span>
+                        <div className={`font-bold ${calculateTotalWeight(character?.items) > (force * 15) ? 'text-red-500' : 'text-emerald-400'}`}>
+                            {calculateTotalWeight(character?.items).toFixed(1)} / {force * 15} kg
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-3 order-2 md:order-3">
                     <Link
                         to="/"
                         className="group relative flex items-center justify-center gap-3 bg-emerald-600 hover:bg-emerald-500 text-white p-3 rounded-xl transition-all hover:scale-105 shadow-lg shadow-emerald-900/40"
@@ -123,66 +166,100 @@ export default function Inventory() {
                     >
                         <Trash2 size={20} />
                     </button>
+
                 </div>
             </div>
 
             {/* Zone Devises (Grid) */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 mb-12">
-                {CURRENCIES.map((curr) => (
-                    <div key={curr.id} className={`bg-slate-800 p-4 rounded-xl border ${curr.border} shadow-lg relative overflow-hidden`}>
-                        <div className={`absolute -top-6 -right-6 w-24 h-24 ${curr.bg} rounded-full blur-2xl opacity-50`}></div>
-
-                        <div className="flex justify-between items-start mb-4 relative z-10">
-                            <div>
-                                <h3 className={`font-bold ${curr.color}`}>{curr.label} ({curr.id.toUpperCase()})</h3>
-                                <p className="text-3xl font-bold text-white">{character[curr.id] || 0}</p>
-                            </div>
-                            <Coins className={`${curr.color} opacity-80`} size={24} />
-                        </div>
-
-                        <div className="flex items-center gap-2 bg-slate-900/50 p-1 rounded-lg border border-slate-700 relative z-10">
-                            <input
-                                type="number"
-                                value={amounts[curr.id] || ''}
-                                onChange={(e) => setAmounts(prev => ({ ...prev, [curr.id]: e.target.value }))}
-                                placeholder="0"
-                                className="bg-transparent text-white w-full px-2 py-1 outline-none font-mono text-center text-sm"
-                            />
-                            <div className="flex gap-1">
-                                <button
-                                    onClick={() => handleCurrencyUpdate(curr.id, false)}
-                                    disabled={!amounts[curr.id]}
-                                    className="p-1 hover:bg-red-500/20 text-red-400 rounded transition-colors disabled:opacity-30"
-                                >
-                                    <Minus size={16} />
-                                </button>
-                                <button
-                                    onClick={() => handleCurrencyUpdate(curr.id, true)}
-                                    disabled={!amounts[curr.id]}
-                                    className="p-1 hover:bg-emerald-500/20 text-emerald-400 rounded transition-colors disabled:opacity-30"
-                                >
-                                    <Plus size={16} />
-                                </button>
-                            </div>
-                        </div>
+            <div className="mb-8">
+                <button
+                    onClick={() => setShowCurrencies(!showCurrencies)}
+                    className="flex items-center gap-2 w-full text-left group mb-4"
+                >
+                    <div className="p-1 bg-slate-800 rounded-lg border border-slate-700 text-emerald-500 group-hover:text-emerald-400 group-hover:border-emerald-500/50 transition-colors">
+                        {showCurrencies ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
                     </div>
-                ))}
+                    <div className="h-px bg-slate-700 flex-1 group-hover:bg-slate-600 transition-colors"></div>
+                    <span className="text-sm font-bold text-slate-500 group-hover:text-slate-400 transition-colors uppercase tracking-wider">
+                        Porte-monnaie
+                    </span>
+                    <div className="h-px bg-slate-700 w-12 group-hover:bg-slate-600 transition-colors"></div>
+                </button>
+
+                {showCurrencies && (
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 mb-12">
+                        {CURRENCIES.map((curr) => (
+                            <div key={curr.id} className={`bg-slate-800 p-4 rounded-xl border ${curr.border} shadow-lg relative overflow-hidden`}>
+                                <div className={`absolute -top-6 -right-6 w-24 h-24 ${curr.bg} rounded-full blur-2xl opacity-50`}></div>
+
+                                <div className="flex justify-between items-start mb-4 relative z-10">
+                                    <div>
+                                        <h3 className={`font-bold ${curr.color}`}>{curr.label} ({curr.id.toUpperCase()})</h3>
+                                        <p className="text-3xl font-bold text-white">{character[curr.id] || 0}</p>
+                                    </div>
+                                    <Coins className={`${curr.color} opacity-80`} size={24} />
+                                </div>
+
+                                <div className="flex items-center gap-2 bg-slate-900/50 p-1 rounded-lg border border-slate-700 relative z-10">
+                                    <input
+                                        type="number"
+                                        value={amounts[curr.id] || ''}
+                                        onChange={(e) => setAmounts(prev => ({ ...prev, [curr.id]: e.target.value }))}
+                                        placeholder="0"
+                                        className="bg-transparent text-white w-full px-2 py-1 outline-none font-mono text-center text-sm"
+                                    />
+                                    <div className="flex gap-1">
+                                        <button
+                                            onClick={() => handleCurrencyUpdate(curr.id, false)}
+                                            disabled={!amounts[curr.id]}
+                                            className="p-1 hover:bg-red-500/20 text-red-400 rounded transition-colors disabled:opacity-30"
+                                        >
+                                            <Minus size={16} />
+                                        </button>
+                                        <button
+                                            onClick={() => handleCurrencyUpdate(curr.id, true)}
+                                            disabled={!amounts[curr.id]}
+                                            className="p-1 hover:bg-emerald-500/20 text-emerald-400 rounded transition-colors disabled:opacity-30"
+                                        >
+                                            <Plus size={16} />
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
 
             {/* Zone Équipement */}
             <div className="max-w-4xl mx-auto">
-                <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-2xl font-bold flex items-center gap-3 text-emerald-400">
-                        <Sword className="text-emerald-500" />
-                        Équipement
-                    </h2>
-                    <button
-                        onClick={() => setShowArmory(true)}
-                        className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl transition-colors shadow-lg shadow-indigo-900/40"
-                    >
-                        <Shield size={18} />
-                        <span className="font-bold">Armurerie</span>
-                    </button>
+                <div className="flex flex-col gap-4 mb-6">
+                    <div className="flex items-center justify-between">
+                        <h2 className="text-2xl font-bold flex items-center gap-3 text-emerald-400">
+                            <Sword className="text-emerald-500" />
+                            Équipement
+                        </h2>
+                        <button
+                            onClick={() => setShowArmory(true)}
+                            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl transition-colors shadow-lg shadow-indigo-900/40"
+                        >
+                            <Shield size={18} />
+                            <span className="font-bold">Armurerie</span>
+                        </button>
+                    </div>
+
+                    {/* Résumé Devises Compact */}
+                    <div className="flex items-center gap-4 text-sm font-mono text-slate-400 bg-slate-800/50 p-2 rounded-lg border border-slate-700/50 w-full overflow-x-auto">
+                        <Coins size={16} className="text-amber-400 flex-shrink-0" />
+                        <div className="flex items-center gap-4 flex-nowrap">
+                            {CURRENCIES.map(curr => (
+                                <div key={curr.id} className="flex items-center gap-1 flex-shrink-0">
+                                    <span className={`font-bold ${curr.color}`}>{character[curr.id] || 0}</span>
+                                    <span className="text-xs uppercase opacity-70">{curr.id}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
                 </div>
 
                 {/* Ajout d'objet */}
@@ -229,7 +306,13 @@ export default function Inventory() {
                                             {item.quantity}
                                         </span>
                                     </div>
-                                    <span className="font-medium text-lg text-slate-200">{item.name}</span>
+                                    <div className="flex flex-col">
+                                        <span className="font-medium text-lg text-slate-200">{item.name}</span>
+                                        <span className="text-xs text-slate-500">
+                                            {(getItemWeight(item.name) * item.quantity).toFixed(1)} kg
+                                            {item.quantity > 1 && ` (${getItemWeight(item.name)} kg/u)`}
+                                        </span>
+                                    </div>
                                 </div>
                                 <button
                                     onClick={() => handleRemoveItem(item.name)}

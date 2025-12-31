@@ -52,3 +52,28 @@ export const ItemIcon = ({ itemName, size = 20, className = "" }) => {
 
     return <Package size={size} className={`text-slate-400 ${className}`} />;
 };
+
+export const getItemWeight = (itemName) => {
+    if (!itemName) return 0;
+    const lowerName = itemName.toLowerCase();
+
+    let item = WEAPONS.find(w => w.name.toLowerCase() === lowerName);
+    if (!item) item = ARMOR.find(a => a.name.toLowerCase() === lowerName);
+    if (!item) item = POTIONS.find(p => p.name.toLowerCase() === lowerName);
+    if (!item) item = AMMUNITION.find(a => a.name.toLowerCase() === lowerName);
+
+    if (item && item.weight) {
+        if (item.weight === "-") return 0;
+        const match = item.weight.match(/([\d.]+)/);
+        return match ? parseFloat(match[1]) : 0;
+    }
+
+    return 0; // Poids par défaut si inconnu
+};
+
+export const calculateTotalWeight = (items) => {
+    if (!items || !Array.isArray(items)) return 0;
+    return items.reduce((total, item) => {
+        return total + (getItemWeight(item.name) * (item.quantity || 1));
+    }, 0);
+};

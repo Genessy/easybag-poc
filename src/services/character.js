@@ -130,3 +130,13 @@ export const deleteCharacter = async (pseudo) => {
 
     await deleteDoc(charRef);
 };
+
+/**
+ * Met à jour les statistiques du personnage (Force, etc.)
+ * @param {string} pseudo 
+ * @param {object} stats - Objet contenant les stats à mettre à jour { force: 10 }
+ */
+export const updateStats = async (pseudo, stats) => {
+    const docRef = doc(db, "parties", "partie_mercredi", "inventaires", pseudo);
+    await updateDoc(docRef, stats);
+};
